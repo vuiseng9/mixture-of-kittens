@@ -1,3 +1,6 @@
+ngpu ?= $(shell nvidia-smi -L | wc -l)
+torchrun_intra = torchrun --standalone --nproc-per-node
+
 SRC ?= csrc/bindings.cu
 HEADERS := $(wildcard csrc/*.cuh) $(wildcard csrc/megakernel/*.cuh)
 NVCC ?= nvcc
@@ -49,3 +52,20 @@ clean:
 	rm -f $(OUT)
 
 .PHONY: all test clean
+
+# MOK_ARCH=SM100 $(PYTHON) -m pip install -e . --no-build-isolation -vvv
+# Multi-arch build is not supported yet.
+
+build-docker-for-b200:
+	docker build --no-cache -t vuiseng9/mixture-of-kittens .
+
+# install-torch 130
+install-for-b200:
+	$(PYTHON) -m pip install pytest
+	MOK_ARCH=SM100 $(PYTHON) setup.py build_ext --inplace
+
+test-functional:
+	$(torchrun_intra) $(ngpu) -m pytest -s tests/test_functional.py
+
+
+
