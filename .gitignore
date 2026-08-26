@@ -17,5 +17,5 @@ __pycache__/
 
 # Misc
 .DS_store
-.vscode
+#.vscode
 *.ncu-rep

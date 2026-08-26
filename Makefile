@@ -1,5 +1,6 @@
 ngpu ?= $(shell nvidia-smi -L | wc -l)
 torchrun_intra = torchrun --standalone --nproc-per-node
+dbg ?= 0
 
 SRC ?= csrc/bindings.cu
 HEADERS := $(wildcard csrc/*.cuh) $(wildcard csrc/megakernel/*.cuh)
@@ -67,5 +68,9 @@ install-for-b200:
 test-functional:
 	$(torchrun_intra) $(ngpu) -m pytest -s tests/test_functional.py
 
+test-ep1-on-each-rank:
+	$(torchrun_intra) $(ngpu) -m pytest -s \
+	  tests/test_misc.py::test_ep1_on_each_rank
 
-
+run-ep1:
+	DBG_ATTACH=$(dbg) $(torchrun_intra) $(ngpu) run_ep1.py
