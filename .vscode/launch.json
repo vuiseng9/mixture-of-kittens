@@ -5,21 +5,12 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "cudagdb - ep1",
+            "name": "cuda-gdb - attach rank",
             "type": "cuda-gdb",
-            "request": "launch",
-            "cwd": "/root/work/dev/mega/mixture-of-kittens",
-            "environment": [
-                {
-                    "name": "DBG_ATTACH",
-                    "value": "0"
-                }
-            ],
+            "request": "attach",
             "program": "/root/miniforge3/envs/mega/bin/python",
-            "args": [
-                "-m", "torch.distributed.run", 
-                "--standalone", "--nproc-per-node=1",
-                "run_ep1.py"],
+            "processId": 58317,
+            "breakOnLaunch": true
         },
         {
             "name": "vs-attach",

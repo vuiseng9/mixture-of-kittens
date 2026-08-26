@@ -2,6 +2,7 @@
 
 import gc
 import os
+import time
 
 import torch
 import torch.distributed as dist
@@ -22,6 +23,23 @@ def main() -> None:
         world_size=world_size,
         device_id=device,
     )
+
+    CUDADBG_ATTACH = False
+    debug_rank = 0 # fix at rank 0 for now
+    if int(os.environ.get("CUDADBG_ATTACH", "0")) == 1:
+        CUDADBG_ATTACH = True
+    if CUDADBG_ATTACH and rank == int(debug_rank):
+        go_file = f"/tmp/cudagdb_go_{os.getpid()}"
+
+        print(
+            f"CUDA-GDB target: rank={rank} "
+            f"local_rank={local_rank} pid= {os.getpid()} "
+            f"go_file= {go_file}",
+            flush=True,
+        )
+
+        while not os.path.exists(go_file):
+            time.sleep(0.2) # poll frequency, every 200ms
 
     singleton_groups: list[dist.ProcessGroup] = []
     try:
@@ -132,11 +150,11 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    DBG_ATTACH = False
-    if int(os.environ.get("DBG_ATTACH", "0")) == 1:
-        DBG_ATTACH = True
+    PYDBG_ATTACH = False
+    if int(os.environ.get("PYDBG_ATTACH", "0")) == 1:
+        PYDBG_ATTACH = True
         
-    if DBG_ATTACH and int(os.environ.get("RANK", "0")) == 0:
+    if PYDBG_ATTACH and int(os.environ.get("RANK", "0")) == 0:
         import debugpy
         debugpy.listen(("127.0.0.1", 5678))
         # optional (only when you want to pause immediately):

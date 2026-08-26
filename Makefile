@@ -1,11 +1,13 @@
 ngpu ?= $(shell nvidia-smi -L | wc -l)
 torchrun_intra = torchrun --standalone --nproc-per-node
-dbg ?= 0
+dbg_build ?= 0
+cudadbg ?= 0
+pydbg ?= 0
 
 SRC ?= csrc/bindings.cu
 HEADERS := $(wildcard csrc/*.cuh) $(wildcard csrc/megakernel/*.cuh)
 NVCC ?= nvcc
-ARCH ?= SM103
+ARCH ?= SM100
 PYTHON ?= python3
 THUNDERKITTENS_ROOT ?= ./third_party/ThunderKittens
 OUT ?= mok/_C$(shell $(PYTHON) -c "import sysconfig; print(sysconfig.get_config_var('EXT_SUFFIX'))")
@@ -16,12 +18,16 @@ PYTORCH_INCLUDES ?= $(shell $(PYTHON) -c "from torch.utils.cpp_extension import 
 PYTORCH_LIBDIR ?= $(shell $(PYTHON) -c "from torch.utils.cpp_extension import library_paths; print(' '.join(['-L' + p for p in library_paths()]))")
 
 # NVCC flags
+ifeq ($(dbg_build),1)
+NVCCFLAGS := -g -G -O0
+else
 NVCCFLAGS := -DNDEBUG -lineinfo
+NVCCFLAGS += -O3 --use_fast_math
+endif
 NVCCFLAGS += --expt-extended-lambda --expt-relaxed-constexpr
 NVCCFLAGS += -Xcompiler=-Wno-psabi -Xcompiler=-fno-strict-aliasing
 NVCCFLAGS += -forward-unknown-to-host-compiler -ftemplate-backtrace-limit=0
 NVCCFLAGS += -std=c++20 -lrt -lpthread -ldl -lcuda -lcudadevrt -lcudart_static
-NVCCFLAGS += -O3 --use_fast_math
 NVCCFLAGS += -Xnvlink=--verbose -Xptxas=--verbose -Xptxas=--warn-on-spills
 NVCCFLAGS += -I${THUNDERKITTENS_ROOT}/include
 NVCCFLAGS += -D__CUDA_NO_HALF_OPERATORS__ -D__CUDA_NO_HALF_CONVERSIONS__
@@ -43,6 +49,10 @@ endif
 
 all: $(OUT)
 
+debug:
+	$(MAKE) clean
+	$(MAKE) dbg_build=1 all
+
 test: $(OUT)
 	$(PYTHON) -m torch.distributed.run --standalone --nproc-per-node=4 -m pytest -s tests/
 
@@ -52,7 +62,7 @@ $(OUT): $(SRC) $(HEADERS)
 clean:
 	rm -f $(OUT)
 
-.PHONY: all test clean
+.PHONY: all debug test clean
 
 # MOK_ARCH=SM100 $(PYTHON) -m pip install -e . --no-build-isolation -vvv
 # Multi-arch build is not supported yet.
@@ -60,7 +70,7 @@ clean:
 build-docker-for-b200:
 	docker build --no-cache -t vuiseng9/mixture-of-kittens .
 
-# install-torch 130
+# install-torch 130 # add dbg=1 for debug build
 install-for-b200:
 	$(PYTHON) -m pip install pytest
 	MOK_ARCH=SM100 $(PYTHON) setup.py build_ext --inplace
@@ -73,4 +83,14 @@ test-ep1-on-each-rank:
 	  tests/test_misc.py::test_ep1_on_each_rank
 
 run-ep1:
-	DBG_ATTACH=$(dbg) $(torchrun_intra) $(ngpu) run_ep1.py
+	CUDADBG_ATTACH=$(cudadbg) \
+	PYDBG_ATTACH=$(pydbg) \
+		$(torchrun_intra) $(ngpu) run_ep1.py
+
+cudagdb-attach-rank0-run-ep1:
+	CUDADBG_ATTACH=1 \
+	PYDBG_ATTACH=$(pydbg) \
+		$(torchrun_intra) $(ngpu) run_ep1.py
+
+enable-cudagdb-via-vscode:
+	echo 0 | sudo tee /proc/sys/kernel/yama/ptrace_scope
